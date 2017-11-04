@@ -1,0 +1,118 @@
+intro: I don't like thinking about operations; I want to write software and then have the rest taken care of.  Sadly, that's not a luxury that we get.  The tools that I'm about to talk about are exactly what I'd like to avoid, but they permit me to avoid stuff that's far worse.
+-We're going to talk about the basic of docker and vagrant and cover any background that's necessary to understand them.  I'm focusing on the stuff that wasn't presented clearly to me when I was learning these tools.
+
+what's a virtual machine?-a software computer, which can be contrasted with a physical computer.  The virtual machines that we care about have a piece broken off, that piece is called the hypervisor and is basically a VM player; sorta like a DVD and a DVD player.
+VMWare, Virtual PC, and VirtualBox are example hypervisors
+
+Our Stack-We going tighten our focus even more and limit ourselves to this stack.  BIOS->Host OS->Hypervisor->Guest OS 
+
+How to use a virtual machine-Install Host OS, install hypervisor, install guest OS, do the exact same stuff on guest OS that you used to do on host OS.  Adds 2 steps..This isn't cool yet.
+
+Making it better-Moving from physical to virtual means that we can start manipulating these things with programs.  This is where vagrant comes in.  You feed it a config file and it builds and configures your VM.  
+
+Vagrant
+
+Base image-vagrant maintains a repository of base images.  They use the term 'box' to refer to these images.  You can also use images that are stored locally.
+https://app.vagrantup.com/boxes/search
+
+Customization-run the following commands:
+mkdir newVM
+cd newVM
+vagrant init ubuntu/xenial64
+ls
+echo date > provision_script.sh
+-Afterwards, open Vagrantfile and add the following line right before 'end'.
+config.vm.provision :shell, path: "provision_script.sh"
+We just created a vagrant config script with a basic xenial64 install as the base image and customized the image by running all of the commands in the shell script provision_script.sh.
+
+Working with VMs-
+run vagrant up
+run vagrant halt
+
+Usage case 1--Build your perfect machine with all the software that you want and then create an image from it.  Setup your vagrant file to make a virtual machine from this image and then run a command to update the OS.
+
+Usage case 2--Use a stock image of your OS and then have a config script that installs all of your software for you.
+Both of these cases are a single command.  Case 1 will create the VM faster.  However, I have a strong preference for the second usage case--If several people need to understand the system, it's a better choice; if you are going to have to change the configuration regularly, it's a better choice.  I don't encourage people to use option 1 except when they have a compelling need.  And, I encourage them to use option 2 to build the template that they use for option 1.
+
+Notes on Vagrant-
+-It isn't the hypervisor and still needs one.  The default is virtualbox.  You can run the virtualbox gui and access the machines.
+-If you want a second VM, create a second Vagrantfile.
+--It was quick, but now you have the basic understanding of how vagrant works and even a starting recipe.
+
+Docker
+
+Monolithic Kernel-
+-I could have said 'hardware' instead of 'BIOS' on these slides, that's the part of the computer that boots up before the operating system starts.
+-The kernel provides the most fundamental services of the operating system like seperate process address spaces, process scheduling, and OS permissions (e.g., file permissions).  
+-User space is the level that you're probably used to interacting with.
+--If you have a terrible error in a program running in the user space, you'll get a nasty message from your computer, but the system will probably keep working.  If you get a terrible error in a lower level, the computer might not get the opportunity to tell you its opinion of you.  So, it's better to push things higher up the stack.  This model here is a monolithic kernel.
+
+Microkernel-
+-In a microkernel, as much is pushed into the user space as possible.  This generally results in stable, easier to maintain systems.  Some examples of user space OS components are login session, the bootstrapping process, bash, the password file, and Internet Explorer.  Clearly the OS has a fuzzy border.
+-In practice, most operating systems make a compromise somewhere in between these two extremes.  But, the illustration of that hybrid, will look exactly like this illustration here.
+-You've heard about the linux kernel and flavors of linux.  There aren't (I don't think) flavors of the linux kernel.  The little block labeled OS on the user space level is the only piece that changes when you change flavors of linux.  And, since Docker requires linux, that's something that we'll pay attention to. 
+
+jails-
+linux has a technology called LXC or containers based on a technology called jails that lets you create a new user space and potentially lock down what aspects of the computer that user space can see. All containers sit on top of the same kernel, though. 
+
+Filesystem Example-
+The easiest example is the file system.  If your root file system has two paths: secret and public, you could potentially create a container whose root actually points to /public.  / in that container is /public/ on the full FS.  /images is /public/images on the full FS.
+
+Making it better-
+I've never seen anyone work with containers directly.  I'm under the impression that it's much easier to get it wrong than right.  That's where Docker comes in, it builds and configures containers for you.  In addition, the default is fairly locked down.
+
+Base Image-Docker maintains a repository of base images and uses the term 'image' to refer to them.  You can also use custom repositories and files stored locally.
+https://hub.docker.com/
+
+Customization-Docker uses a unioning file system, which makes it easy, and fairly inexpensive to build new images on top of existing images.  Basically, it tracks the delta between the base image and the new image.  So, instead of customizing your box on top of a base image, you'll typically build a new image based on the previous image.  It's possible to do some customization, but it can be clunky, so I wouldn't usually do much more than changing environmental variables.
+
+Linux Users-
+Linux uses integers for user IDs.  UID 0 is always the most powerful user account and is usually called root.  The password file is a convenience offered by the operating system that takes the UID and converts it to a longer name.  By default, a container won't share the password file with the host operating system, but UIDs are universal.  So if a file is owned by UID 100, Bob, in the host and UID 100 is Bob in the container, the OS in the container will do funky stuff with the file and Bob will own Alice's file inside the container.
+
+Root-
+This is a bigger deal with UID 0.  Most base images have 0 as the default user.  That should be changed before you release to production.  In theory, the container should prevent a user from breaking out, but you shouldn't run a webserver as root even though, in theory the webserver should also prevent the user from getting extra access.
+
+Working with Containers-
+docker
+docker run
+docker run -i
+docker run --rm
+docker ps -a
+docker rm
+docker rm --help
+
+Notes on Docker-
+-a container has one main process.  The container runs until the process finishes.  Other processes can be run in a container that is active.
+-docker run creates a new container.  That container might stop when the process finishes, but it'll continue to exist until you remove it with docker rm.
+-containers are the delta between the image and the current state, so they are potentially quite small.
+-like vagrant, you can create images by taking a container and converting it directly and I don't like that way of doing it.
+-The Dockerfile contains all of the configuration information for an image and each instruction creates a new layer in the unioning FS, which is why people have very complex RUN commands in dockerfiles.
+
+Side by Side-
+Both systems create paths that aren't easily accessible in the host OS.  
+Both systems allow you to share paths with the host OS.
+Both systems allow you to control the exposure space of the network.
+Docker lets you create private virtual networks.
+Both systems allow you to have GUIs if you jump through a few hoops.
+Both systems allow you to limit resources.
+Vagrant allocates full resources at boot time, docker allocates resources as needed (processes in container are really close to processes in host OS).
+vagrant lets you create users, docker is more complicated.
+Both can run on linux, mac, and windows.  Docker on windows, though is really running in a linux virtual machine.
+docker images tend to be minimalist, while vagrant images are typically full.  This means that it takes less work to setup a dev VM on vagrant than docker
+Docker containers are much faster to boot than vagrant machines
+Vagrant machines have stricter isolation than docker containers and are easier to make secure, but both can be secured well.
+Docker requires root access to run containers, vagrant doesn't
+docker likes some info to be passed in the run command and these can get complex, vagrant wants the info in the config file.
+Both will perform well on a CPU with virtualization support.
+
+
+Conclusion:
+These are great technologies and you should use one of them.  In practice, it's much easier to switch between these two techs than to start using either one.
+
+Questions:
+which one's better? - meh
+How to deploy? - hodgepodge of tools, but they're pretty good.  E.g., AWS plugin for vagrant or Azure deploy from dockerhub
+emulator v hypervisor? - emulators transform the layer between the hardware and hypervisors
+what user owns files created on each system type? - the user that ran vagrant up or the UID in the docker container.
+what are containers and images for docker?
+No docker example? - I only want to use potentially viable examples in the talk and it's much harder to get a basic level of security on docker images than vagrant images and it requires you to match some stuff in the host and guest OSes.
